@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 短剧 Prompt 生成器</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: #fafafa; color: #222; line-height: 1.6; }
+
+  .container { max-width: 760px; margin: 0 auto; padding: 40px 20px 80px; }
+  h1 { font-size: 22px; font-weight: 600; margin-bottom: 4px; }
+  .subtitle { font-size: 13px; color: #999; margin-bottom: 32px; }
+
+  /* Sections */
+  .section { background: #fff; border: 1px solid #e5e5e5; border-radius: 8px; padding: 24px; margin-bottom: 16px; }
+  .section-title { font-size: 13px; font-weight: 600; color: #666; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+
+  /* Form */
+  .form-row { display: flex; gap: 12px; margin-bottom: 12px; }
+  .form-group { flex: 1; }
+  .form-group label { display: block; font-size: 12px; color: #888; margin-bottom: 4px; }
+  .form-group input, .form-group select { width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; background: #fafafa; outline: none; transition: border-color 0.2s; }
+  .form-group input:focus, .form-group select:focus { border-color: #333; background: #fff; }
+
+  textarea { width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; font-family: inherit; background: #fafafa; outline: none; resize: vertical; min-height: 80px; transition: border-color 0.2s; }
+  textarea:focus { border-color: #333; background: #fff; }
+  textarea::placeholder { color: #bbb; }
+
+  /* Upload area */
+  .upload-area { border: 2px dashed #ddd; border-radius: 8px; padding: 32px; text-align: center; cursor: pointer; transition: all 0.2s; position: relative; }
+  .upload-area:hover { border-color: #999; background: #f5f5f5; }
+  .upload-area.dragover { border-color: #333; background: #f0f0f0; }
+  .upload-area.has-file { border-color: #333; border-style: solid; background: #f8f8f8; }
+  .upload-icon { font-size: 28px; margin-bottom: 8px; opacity: 0.3; }
+  .upload-text { font-size: 14px; color: #888; }
+  .upload-hint { font-size: 12px; color: #bbb; margin-top: 4px; }
+  .file-name { font-size: 14px; font-weight: 500; color: #333; }
+  .file-meta { font-size: 12px; color: #999; margin-top: 2px; }
+  .file-remove { position: absolute; top: 12px; right: 12px; background: none; border: none; font-size: 18px; color: #bbb; cursor: pointer; }
+  .file-remove:hover { color: #666; }
+  #file-input { display: none; }
+
+  /* Provider selector */
+  .provider-tabs { display: flex; gap: 0; margin-bottom: 16px; border: 1px solid #ddd; border-radius: 6px; overflow: hidden; }
+  .provider-tab { flex: 1; padding: 8px; text-align: center; font-size: 13px; cursor: pointer; background: #fafafa; border-right: 1px solid #ddd; transition: all 0.15s; user-select: none; }
+  .provider-tab:last-child { border-right: none; }
+  .provider-tab:hover { background: #f0f0f0; }
+  .provider-tab.active { background: #333; color: #fff; }
+  .provider-tab.disabled { opacity: 0.35; cursor: not-allowed; }
+
+  /* Generate button */
+  .btn-generate { width: 100%; padding: 14px; background: #222; color: #fff; border: none; border-radius: 8px; font-size: 15px; font-weight: 500; cursor: pointer; transition: background 0.2s; }
+  .btn-generate:hover { background: #000; }
+  .btn-generate:disabled { background: #ccc; cursor: not-allowed; }
+
+  /* Progress */
+  .progress-area { display: none; }
+  .progress-area.visible { display: block; }
+  .progress-bar-track { height: 4px; background: #eee; border-radius: 2px; overflow: hidden; margin-bottom: 12px; }
+  .progress-bar-fill { height: 100%; background: #333; border-radius: 2px; transition: width 0.3s ease; width: 0%; }
+  .progress-log { font-size: 12px; color: #888; max-height: 160px; overflow-y: auto; font-family: "SF Mono", "Fira Code", monospace; }
+  .progress-log .line { padding: 2px 0; }
+  .progress-log .line.error { color: #c00; }
+  .progress-log .line.ok { color: #333; }
+
+  /* Download */
+  .download-area { display: none; text-align: center; padding: 20px; }
+  .download-area.visible { display: block; }
+  .btn-download { display: inline-block; padding: 12px 32px; background: #222; color: #fff; border: none; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; text-decoration: none; transition: background 0.2s; }
+  .btn-download:hover { background: #000; }
+  .stats { font-size: 13px; color: #888; margin-bottom: 16px; }
+
+  /* Responsive */
+  @media (max-width: 600px) {
+    .form-row { flex-direction: column; gap: 8px; }
+    .provider-tabs { flex-wrap: wrap; }
+    .provider-tab { flex: none; width: 50%; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>AI 短剧 Prompt 生成器</h1>
+  <p class="subtitle">上传分镜 Excel，一键生成 AI 视频工具可用的 Prompt</p>
+
+  <!-- 全局设定 -->
+  <div class="section">
+    <div class="section-title">全局设定</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>画面风格</label>
+        <input type="text" id="style" value="暗黑奇幻风" placeholder="如：电影写实风">
+      </div>
+      <div class="form-group">
+        <label>画面比例</label>
+        <select id="ratio">
+          <option value="16:9" selected>16:9 横屏</option>
+          <option value="9:16">9:16 竖屏</option>
+          <option value="1:1">1:1 方形</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>色调倾向</label>
+        <input type="text" id="tone" value="冷暗色调" placeholder="如：暖色调、低饱和">
+      </div>
+      <div class="form-group">
+        <label>光影风格</label>
+        <input type="text" id="lighting" value="室内点光源" placeholder="如：自然光、逆光">
+      </div>
+    </div>
+  </div>
+
+  <!-- 角色卡 -->
+  <div class="section">
+    <div class="section-title">角色卡</div>
+    <textarea id="characters" placeholder="每行一个角色，格式：&#10;- 付前：男25岁，黑色短发，深色工装外套&#10;- 付前（Q版）：大头小身，圆脸大眼，卡通风格&#10;- 方盒子系统：发光半透明方形盒子，悬浮"></textarea>
+  </div>
+
+  <!-- 上传 -->
+  <div class="section">
+    <div class="section-title">上传分镜表</div>
+    <div class="upload-area" id="upload-area">
+      <div id="upload-placeholder">
+        <div class="upload-icon">↑</div>
+        <div class="upload-text">拖拽 Excel 文件到这里，或点击选择</div>
+        <div class="upload-hint">支持 .xlsx 格式，需包含：序号、人物、镜头、景别、构图、画面内容、时长</div>
+      </div>
+      <div id="upload-fileinfo" style="display:none">
+        <div class="file-name" id="file-name"></div>
+        <div class="file-meta" id="file-meta"></div>
+      </div>
+      <button class="file-remove" id="file-remove" style="display:none" onclick="removeFile(event)">✕</button>
+    </div>
+    <input type="file" id="file-input" accept=".xlsx,.xls">
+  </div>
+
+  <!-- 供应商 -->
+  <div class="section">
+    <div class="section-title">AI 供应商</div>
+    <div class="provider-tabs" id="provider-tabs"></div>
+  </div>
+
+  <!-- 按钮 -->
+  <button class="btn-generate" id="btn-generate" disabled onclick="startGenerate()">选择文件后开始生成</button>
+
+  <!-- 进度 -->
+  <div class="section progress-area" id="progress-area">
+    <div class="section-title">生成进度</div>
+    <div class="progress-bar-track"><div class="progress-bar-fill" id="progress-fill"></div></div>
+    <div class="progress-log" id="progress-log"></div>
+  </div>
+
+  <!-- 下载 -->
+  <div class="section download-area" id="download-area">
+    <div class="stats" id="stats"></div>
+    <a class="btn-download" id="btn-download" href="#">下载 Excel 结果</a>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+let selectedFile = null;
+let selectedProvider = '';
+
+// === 供应商 ===
+async function loadProviders() {
+  try {
+    const res = await fetch('/api/providers');
+    const data = await res.json();
+    const tabs = $('provider-tabs');
+    tabs.innerHTML = '';
+    data.providers.forEach(p => {
+      const tab = document.createElement('div');
+      tab.className = 'provider-tab' + (!p.available ? ' disabled' : '') + (p.name === data.default ? ' active' : '');
+      tab.textContent = p.name;
+      tab.dataset.name = p.name;
+      if (p.available) {
+        tab.onclick = () => selectProvider(p.name);
+      }
+      tabs.appendChild(tab);
+    });
+    selectedProvider = data.default;
+  } catch (e) {
+    $('provider-tabs').innerHTML = '<div style="color:#c00;font-size:13px">无法加载供应商列表</div>';
+  }
+}
+
+function selectProvider(name) {
+  selectedProvider = name;
+  document.querySelectorAll('.provider-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.name === name);
+  });
+}
+
+// === 文件上传 ===
+const uploadArea = $('upload-area');
+const fileInput = $('file-input');
+
+uploadArea.addEventListener('click', e => {
+  if (e.target.id !== 'file-remove') fileInput.click();
+});
+uploadArea.addEventListener('dragover', e => { e.preventDefault(); uploadArea.classList.add('dragover'); });
+uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+uploadArea.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadArea.classList.remove('dragover');
+  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', () => {
+  if (fileInput.files.length) handleFile(fileInput.files[0]);
+});
+
+function handleFile(file) {
+  if (!file.name.match(/\.xlsx?$/i)) {
+    alert('请上传 .xlsx 格式的 Excel 文件');
+    return;
+  }
+  selectedFile = file;
+  uploadArea.classList.add('has-file');
+  $('upload-placeholder').style.display = 'none';
+  $('upload-fileinfo').style.display = 'block';
+  $('file-remove').style.display = 'block';
+  $('file-name').textContent = file.name;
+  $('file-meta').textContent = (file.size / 1024).toFixed(1) + ' KB';
+  $('btn-generate').disabled = false;
+  $('btn-generate').textContent = '🚀 开始生成 Prompt';
+}
+
+function removeFile(e) {
+  e.stopPropagation();
+  selectedFile = null;
+  fileInput.value = '';
+  uploadArea.classList.remove('has-file');
+  $('upload-placeholder').style.display = 'block';
+  $('upload-fileinfo').style.display = 'none';
+  $('file-remove').style.display = 'none';
+  $('btn-generate').disabled = true;
+  $('btn-generate').textContent = '选择文件后开始生成';
+}
+
+// === 生成 ===
+async function startGenerate() {
+  if (!selectedFile || !selectedProvider) return;
+
+  const btn = $('btn-generate');
+  btn.disabled = true;
+  btn.textContent = '⏳ 生成中...';
+
+  // 重置 UI
+  $('progress-area').classList.add('visible');
+  $('download-area').classList.remove('visible');
+  $('progress-fill').style.width = '0%';
+  $('progress-log').innerHTML = '';
+
+  const formData = new FormData();
+  formData.append('file', selectedFile);
+  formData.append('provider', selectedProvider);
+  formData.append('style', $('style').value);
+  formData.append('ratio', $('ratio').value);
+  formData.append('tone', $('tone').value);
+  formData.append('lighting', $('lighting').value);
+  formData.append('characters', $('characters').value);
+
+  try {
+    const res = await fetch('/api/generate', { method: 'POST', body: formData });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || '请求失败');
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        try {
+          const evt = JSON.parse(line.slice(6));
+          handleEvent(evt);
+        } catch (e) {}
+      }
+    }
+  } catch (e) {
+    addLog('❌ ' + e.message, 'error');
+  }
+
+  btn.disabled = false;
+  btn.textContent = '🚀 重新生成';
+}
+
+function handleEvent(evt) {
+  switch (evt.type) {
+    case 'progress': {
+      const pct = Math.round(((evt.batch - 1) * 2 + (evt.step === 'opensource' ? 1 : 0)) / (evt.total * 2) * 100);
+      $('progress-fill').style.width = pct + '%';
+      const label = evt.step === 'premium' ? '优质模型' : '开源模型';
+      addLog(`⏳ 批次 ${evt.batch}/${evt.total}（${evt.range}）${label} 生成中...`);
+      break;
+    }
+    case 'batch_done':
+      addLog(`✅ ${evt.mode === 'premium' ? '优质模型' : '开源模型'}完成（${evt.count}条）`, 'ok');
+      break;
+    case 'batch_error':
+      addLog(`❌ ${evt.mode === 'premium' ? '优质模型' : '开源模型'}失败：${evt.error}`, 'error');
+      break;
+    case 'complete':
+      $('progress-fill').style.width = '100%';
+      addLog(`🎉 全部完成！优质模型 ${evt.premium_count}条 / 开源模型 ${evt.opensource_count}条`, 'ok');
+      $('download-area').classList.add('visible');
+      $('stats').textContent = `共处理 ${evt.total_shots} 个镜头 · 优质模型 ${evt.premium_count} 条 · 开源模型 ${evt.opensource_count} 条`;
+      $('btn-download').href = `/api/download/${evt.task_id}`;
+      break;
+    case 'error':
+      addLog('❌ ' + evt.message, 'error');
+      break;
+  }
+}
+
+function addLog(text, type) {
+  const log = $('progress-log');
+  const line = document.createElement('div');
+  line.className = 'line' + (type ? ' ' + type : '');
+  line.textContent = text;
+  log.appendChild(line);
+  log.scrollTop = log.scrollHeight;
+}
+
+// 初始化
+loadProviders();
+</script>
+</body>
+</html>
